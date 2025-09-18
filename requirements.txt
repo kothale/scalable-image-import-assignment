@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+gdown
+python-magic-bin
+mysql-connector-python
+pydantic
+python-dotenv
