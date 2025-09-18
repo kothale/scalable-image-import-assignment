@@ -1,11 +1,11 @@
 # Scalable Image Import System
 
-## 🚀 Working Site
+##  Working Site
 [[Live Application URL](https://scalable-image-import.onrender.com)]
 
 ---
 
-## 📖 Project Overview
+## Project Overview
 This project implements a scalable backend system to import images from a public Google Drive folder and store them in cloud storage. 
 Image metadata is saved in PostgreSQL, and a simple frontend displays imported images.
 
@@ -18,7 +18,7 @@ Image metadata is saved in PostgreSQL, and a simple frontend displays imported i
 
 ---
 
-## 📂 Repository Structure
+##  Repository Structure
 scalable-image-import/
 ├─ main.py
 ├─ requirements.txt
@@ -31,7 +31,7 @@ scalable-image-import/
 
 ---
 
-## ⚙️ Setup Instructions
+## Setup Instructions
 
 ### 
 1. Clone Repository
@@ -55,7 +55,7 @@ DATABASE_URL=postgresql://<username>:<password>@<host>:<port>/<database>?sslmode
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 
-🔌 API Documentation
+API Documentation
 POST /import
 
 Import images from Google Drive.
@@ -95,7 +95,7 @@ GET /image/{image_id}
 
 Download specific image by ID.
 
-🏗 Architecture & Design
+Architecture & Design
 
 Single FastAPI backend with embedded frontend
 
@@ -105,7 +105,7 @@ Local storage/ folder for images
 
 Scalable: can add S3 storage, background workers, and Dockerization
 
-📦 Deployment (Render)
+ Deployment (Render)
 
 Connect GitHub repo to Render → New Web Service
 
@@ -123,7 +123,7 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 
 Deploy → Use public URL
 
-⚡ Notes on Scalability
+Notes on Scalability
 
 Supports small to medium imports
 
@@ -137,7 +137,7 @@ DB indexing on google_drive_id
 
 Chunked downloads and retries
 
-👨‍💻 Author
+ Author
 
 GitHub: https://github.com/kothale  
 
