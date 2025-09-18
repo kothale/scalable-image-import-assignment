@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-python-magic
 gdown
-mysql-connector-python
+python-magic
+psycopg2-binary
 python-dotenv
