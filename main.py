@@ -16,13 +16,13 @@ from psycopg2.extras import RealDictCursor
 # Load environment variables
 load_dotenv()
 
-# Set up logging
+# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Mount storage folder
+# Ensure storage folder exists BEFORE mounting
 if not os.path.exists("storage"):
     os.makedirs("storage")
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
@@ -36,7 +36,7 @@ def get_db_connection():
         logger.error(f"PostgreSQL connection failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"PostgreSQL connection failed: {str(e)}")
 
-# Create table if not exists
+# Create images table if not exists
 conn = get_db_connection()
 cursor = conn.cursor()
 cursor.execute("""
@@ -58,7 +58,7 @@ conn.close()
 class ImportRequest(BaseModel):
     url: str
 
-# Import images from Google Drive
+# Import images
 @app.post("/import")
 async def import_images(req: ImportRequest):
     conn = get_db_connection()
@@ -67,6 +67,7 @@ async def import_images(req: ImportRequest):
         temp_dir = "downloads"
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
+
         logger.info(f"Downloading from {req.url} to {temp_dir}")
         output = gdown.download_folder(req.url, output=temp_dir, quiet=False, remaining_ok=True)
 
@@ -83,16 +84,19 @@ async def import_images(req: ImportRequest):
                 src_path = os.path.join(root, file)
                 dest_path = os.path.join("storage", file)
                 if os.path.exists(dest_path):
+                    logger.info(f"Skipping duplicate file: {file}")
                     continue
 
                 try:
                     file_size = os.path.getsize(src_path)
                     mime_type = magic.from_file(src_path, mime=True)
                     if not mime_type.startswith('image/'):
+                        logger.info(f"Skipping non-image MIME: {file} ({mime_type})")
                         continue
 
                     gdrive_id = file  # placeholder
                     image_id = str(uuid.uuid4())
+                    logger.info(f"Moving {file} -> {dest_path}")
                     shutil.move(src_path, dest_path)
 
                     cursor.execute("""
@@ -115,7 +119,7 @@ async def import_images(req: ImportRequest):
         cursor.close()
         conn.close()
 
-# List images API
+# List images
 @app.get("/images")
 async def list_images():
     conn = get_db_connection()
@@ -124,8 +128,6 @@ async def list_images():
         cursor.execute('SELECT * FROM images')
         rows = cursor.fetchall()
         return rows
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cursor.close()
         conn.close()
@@ -145,80 +147,61 @@ async def get_image(image_id: str):
         cursor.close()
         conn.close()
 
-# Frontend HTML
+# Frontend
 html_content = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Image Importer</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
-        h1, h2 { color: #333; }
-        .form-container { margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input[type="text"] { padding: 10px; width: 400px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #45a049; }
-        #import-status { color: #555; font-style: italic; }
-        .image-list { list-style: none; padding: 0; }
-        .image-list li { margin: 10px 0; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .image-list a { color: #0066cc; text-decoration: none; }
-        .image-list a:hover { text-decoration: underline; }
-        .image-list img { margin-top: 10px; max-width: 100px; }
-        .error { color: red; }
-    </style>
+<title>Image Importer</title>
+<style>
+body { font-family: Arial; background: #f4f4f4; margin: 20px; }
+h1,h2 { color:#333; }
+.form-container { padding:15px; background:#fff; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px; }
+input[type=text] { padding:10px; width:400px; border:1px solid #ccc; border-radius:4px; }
+button { padding:10px 20px; background:#4CAF50; color:white; border:none; border-radius:4px; cursor:pointer; }
+button:hover { background:#45a049; }
+.image-list li { margin:10px 0; padding:10px; background:#fff; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+.error { color:red; }
+</style>
 </head>
 <body>
-    <h1>Image Importer</h1>
-    <div class="form-container">
-        <h2>Import Images from Google Drive Folder</h2>
-        <input type="text" id="url" placeholder="Public Google Drive Folder URL">
-        <button onclick="importImages()">Import</button>
-        <p id="import-status"></p>
-    </div>
-    <h2>Imported Images</h2>
-    <ul class="image-list" id="image-list"></ul>
-    <script>
-        async function importImages() {
-            const url = document.getElementById('url').value;
-            const status = document.getElementById('import-status');
-            status.textContent = 'Importing...';
-            try {
-                const res = await fetch('/import', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({url})
-                });
-                const data = await res.json();
-                status.textContent = data.message || 'Import completed';
-                loadImages();
-            } catch (err) {
-                status.textContent = 'Error: ' + err.message;
-            }
-        }
-
-        async function loadImages() {
-            const list = document.getElementById('image-list');
-            list.innerHTML = '';
-            try {
-                const res = await fetch('/images');
-                const images = await res.json();
-                if (!images.length) list.innerHTML = '<li>No images found.</li>';
-                images.forEach(img => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `
-                        <strong>${img.name}</strong><br>
-                        Size: ${img.size} bytes, Type: ${img.mime_type}<br>
-                        <a href="/storage/${img.name}" target="_blank">View Image</a><br>
-                        <img src="/storage/${img.name}" alt="${img.name}">
-                    `;
-                    list.appendChild(li);
-                });
-            } catch (err) {
-                list.innerHTML = `<li class="error">Error loading images: ${err.message}</li>`;
-            }
-        }
-        loadImages();
-    </script>
+<h1>Image Importer</h1>
+<div class="form-container">
+<h2>Import Images from Google Drive Folder</h2>
+<input type="text" id="url" placeholder="Public Google Drive Folder URL">
+<button onclick="importImages()">Import</button>
+<p id="import-status"></p>
+</div>
+<h2>Imported Images</h2>
+<ul id="image-list" class="image-list"></ul>
+<script>
+async function importImages() {
+const url=document.getElementById('url').value;
+const status=document.getElementById('import-status');
+status.textContent='Importing...';
+try{
+const res=await fetch('/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+const data=await res.json();
+status.textContent=data.message||'Import completed';
+loadImages();
+}catch(err){status.textContent='Error: '+err.message;}
+}
+async function loadImages(){
+const list=document.getElementById('image-list');
+list.innerHTML='';
+try{
+const res=await fetch('/images');
+const images=await res.json();
+if(!images.length){list.innerHTML='<li>No images found.</li>';}
+images.forEach(img=>{
+const li=document.createElement('li');
+li.innerHTML=`<strong>${img.name}</strong><br>Size: ${img.size} bytes, Type: ${img.mime_type}<br><a href="/storage/${img.name}" target="_blank">View Image</a><br><img src="/storage/${img.name}" alt="${img.name}">`;
+list.appendChild(li);
+});
+}catch(err){list.innerHTML=`<li class="error">Error loading images: ${err.message}</li>`;}
+}
+loadImages();
+</script>
 </body>
 </html>
 """
